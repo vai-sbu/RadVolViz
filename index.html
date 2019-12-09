@@ -1,0 +1,1606 @@
+<html lang="en">
+	<head>
+		<title>3D ColorMap </title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+
+		</style>
+	</head>
+	<body onload="drawInitialchart()">
+		<div class = "row" id="container">
+
+			<!--0.0<img id="transferFunctionImg" style="align:right"/>1.0-->
+		</div>
+
+
+<div>
+
+	<div class = "row ">
+	<div class = "col-md-6 special" align = "center" >
+		<fieldset id="controls">
+	  <div style="color:white; display: none" >
+				Load CSV File:  <input type="file" id="input-files" onchange=" drawInitialchart(this.file)" >
+		</div>
+
+		<div style="color:white">
+			<div id = "my-gui-container2">
+			</div>
+		<!--		Load Image:  <input type="file" id="input-files-image" onchange=" " >-->
+		</div>
+
+<hr>
+			<legend>2D - ColorMap</legend>
+      <div id = "testGLSLJS">
+      </div>
+
+
+      	<!--	Angle : <input type="range" id="wait" min="0" max="360" value="0" class="slider"orient="vertical" onchange=" radioOnChange()">-->
+				<div class = "row">
+				<div class = " col-md-8">
+					<input type="button" value="Clear Region" onclick="ClearSVGPoints();">
+
+					<div id ="hello">
+					</div>
+				</div>
+				<div class = "col-md-4">
+
+				</div>
+				</div>
+				<div id="gbc_mode"style= "font-size: 14px;" >
+				  <input type="radio" id="brush" name="rate" value="brush"  onchange=" radioOnChange(value)">  BRUSH COLORING</input>
+					 <input type="radio" id="autocolor" name="rate" value="autocolor" checked="checked"  onchange=" radioOnChange(value)"> DATA-DRIVEN COLORING</input>
+					<hr>
+				</div>
+
+
+<div id="my-gui-container" >
+
+</div>
+		</fieldset>
+</div>
+</div>
+</div>
+    <!-- DEFAULT FILES WHICH DO NOT NEED ANY CHANGE-->
+ 		<script src="https://d3js.org/d3.v3.min.js"></script>
+		<script src="https://d3js.org/d3.v4.min.js"></script>
+		<script src="./js/three.min.js"></script>
+		<script src="./js/Detector.js"></script>
+		<script src="./js/stats.min.js"></script>
+		<script src="./js/OrbitControls.js"></script>
+		<script src="./js/dat.gui.min.js"></script>
+    	<script src="https://unpkg.com/d3-hist2d@1.0.6/build/d3-hist2d.min.js"></script>
+		<script src="https://d3js.org/d3-color.v1.min.js"></script>
+		<script src="https://d3js.org/d3-hsv.v0.1.min.js"></script>
+		<script src="https://cdn.rawgit.com/fabid/d3-heatmap/master/heatmap.js"></script>
+    	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/rangeslider.js/2.3.2/rangeslider.css">
+    	<script  src="https://code.jquery.com/jquery-3.3.1.min.js"  crossorigin="anonymous"></script>
+
+    <!-- FILES THAT CAN BE CONSIDERED FOR CHANGE -->
+			<script src="./js/wedgeShader_weight_brushing.js"></script>
+		<script src="./js/interaction_2dColormap_brushing.js"></script>
+		<script src="./js/interact_GBC_brushing.js">  </script>
+    <!-- <script src="./js/wedge_weight.js"></script> -->
+		<script src="./js/wedge_weight_brushing.js"></script>
+		<script src="./js/circleLineOnSvg_brushing.js"></script>
+    <!-- <script src="./js/brushingSVG.js"></script> -->
+    <script src="./js/simplify.js"></script>
+		<script type="text/javascript" src="./js/brushingCode_fromHello.js"></script>
+		<!-- <script type="text/javascript" src="./js/drawpoly.js"> -->
+
+		</script>
+		  <!-- <script src="./js/drawingSVG.js"></script> -->
+		<!-- <script src="js/Volume.js"></script>
+		<script src="js/VolumeSlice.js"></script>
+		<script src="js/TrackballControls.js"></script> -->
+		<!-- load fonts -->
+
+<script src="./js/helvetiker_bold.typeface.js"></script>
+<script src="./js/helvetiker_regular.typeface.js"></script>
+
+
+
+		<link rel="stylesheet" href="./css/coloring.css">
+
+
+		<script id="fragmentShaderFirstPass" type="x-shader/x-fragment">
+			varying vec3 worldSpaceCoords;
+
+			void main()
+			{
+				//The fragment's world space coordinates as fragment output.
+				gl_FragColor = vec4( worldSpaceCoords.x , worldSpaceCoords.y, worldSpaceCoords.z, 1 );
+			}
+		</script>
+		<script id="vertexShaderFirstPass" type="x-shader/x-vertex">
+			varying vec3 worldSpaceCoords;
+
+			void main()
+			{
+				//Set the world space coordinates of the back faces vertices as output.
+				worldSpaceCoords = position + vec3(0.5, 0.5, 0.5); //move it from [-0.5;0.5] to [0,1]
+				gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+			}
+		</script>
+		<script id="fragmentShaderSecondPass" type="x-shader/x-fragment">
+			varying vec3 worldSpaceCoords;
+			varying vec4 projectedCoords;
+			uniform sampler2D tex, cubeTex, transferTex, cubeTex2;
+			uniform float steps;
+			uniform float alphaCorrection;
+			uniform float rangeVal;
+			uniform float maxrangeVal;
+
+			uniform float rotateVarG;
+			uniform float rotateVar3D;
+			uniform float radialValue;
+			uniform float lensMode;
+			uniform float lensAng;
+			uniform float lensMove;
+			uniform float modeGBC;
+      uniform float testValue;
+			uniform float xValue;
+			uniform float yValue;
+			uniform float radiusR;
+			uniform float startAng;
+			uniform float arcWidth;
+			uniform float modeARC;
+			uniform float points;
+			vec3 HCL2Sample;
+			vec3 HCLDSample;
+			uniform bool defaultLens;
+
+			uniform float xClippingPlaneMax;
+			uniform float xClippingPlaneMin;
+			uniform float xClippingPlaneMin2;
+			uniform float yClippingPlaneMax;
+			uniform float yClippingPlaneMin;
+			uniform float zClippingPlaneMax;
+			uniform float zClippingPlaneMin;
+			uniform float wClippingPlane;
+			uniform float axisClipping;
+
+			uniform float x1;
+			uniform float x2;
+			uniform float x3;
+			uniform float x4;
+			uniform float x5;
+			uniform float x6;
+			uniform float x7;
+			uniform float y1;
+			uniform float y2;
+			uniform float y3;
+			uniform float y4;
+			uniform float y5;
+			uniform float y6;
+			uniform float y7;
+
+			uniform float x11;
+			uniform float x12;
+			uniform float x13;
+			uniform float x14;
+			uniform float x15;
+			uniform float x16;
+			uniform float x17;
+			uniform float y11;
+			uniform float y12;
+			uniform float y13;
+			uniform float y14;
+			uniform float y15;
+			uniform float y16;
+			uniform float y17;
+
+			uniform float x31;
+			uniform float x32;
+			uniform float x33;
+			uniform float x34;
+			uniform float x35;
+			uniform float x36;
+			uniform float x37;
+			uniform float y31;
+			uniform float y32;
+			uniform float y33;
+			uniform float y34;
+			uniform float y35;
+			uniform float y36;
+			uniform float y37;
+
+			uniform float x41;
+			uniform float x42;
+			uniform float x43;
+			uniform float x44;
+			uniform float x45;
+			uniform float x46;
+			uniform float x47;
+			uniform float y41;
+			uniform float y42;
+			uniform float y43;
+			uniform float y44;
+			uniform float y45;
+			uniform float y46;
+			uniform float y47;
+
+			uniform float x51;
+			uniform float x52;
+			uniform float x53;
+			uniform float x54;
+			uniform float x55;
+			uniform float x56;
+			uniform float x57;
+			uniform float y51;
+			uniform float y52;
+			uniform float y53;
+			uniform float y54;
+			uniform float y55;
+			uniform float y56;
+			uniform float y57;
+
+			uniform float hslh1;
+			uniform float hslh2;
+			uniform float hslh3;
+			uniform float hslh4;
+			uniform float hslh5;
+			uniform float hsls1;
+			uniform float hsls2;
+			uniform float hsls3;
+			uniform float hsls4;
+			uniform float hsls5;
+			uniform float hsll;
+			uniform float polySide;
+			uniform float brushMode;
+			const int MAX_POLY = 4;
+			// vec4 polyX;
+			// vec4 polyY;
+
+
+
+    //  uniform rorateVar1;
+			// The maximum distance through our rendering volume is sqrt(3).
+			// The maximum number of steps we take to travel a distance of 1 is 512.
+			// ceil( sqrt(3) * 512 ) = 887
+			// This prevents the back of the image from getting cut off when steps=512 & viewing diagonally.
+			const int MAX_STEPS = 887;
+
+			//Acts like a texture3D using Z slices and trilinear filtering.
+			vec4 sampleAs3DTexture( vec3 texCoord )
+			{
+				vec4 colorSlice1, colorSlice2, colorSlice3, colorSlice4;
+				vec2 texCoordSlice1, texCoordSlice2;
+
+				//The z coordinate determines which Z slice we have to look for.
+				//Z slice number goes from 0 to 255.
+				float zSliceNumber1 = floor(texCoord.z  * 255.0);
+
+				//As we use trilinear we go the next Z slice.
+				float zSliceNumber2 = min( zSliceNumber1 + 1.0, 255.0); //Clamp to 255
+
+				//The Z slices are stored in a matrix of 16x16 of Z slices.
+				//The original UV coordinates have to be rescaled by the tile numbers in each row and column.
+				texCoord.xy /= 16.0;
+
+				texCoordSlice1 = texCoordSlice2 = texCoord.xy;
+
+				//Add an offset to the original UV coordinates depending on the row and column number.
+				texCoordSlice1.x += (mod(zSliceNumber1, 16.0 ) / 16.0);
+				texCoordSlice1.y += floor((255.0 - zSliceNumber1) / 16.0) / 16.0;
+
+				texCoordSlice2.x += (mod(zSliceNumber2, 16.0 ) / 16.0);
+				texCoordSlice2.y += floor((255.0 - zSliceNumber2) / 16.0) / 16.0;
+
+				//Get the opacity value from the 2D texture.
+				//Bilinear filtering is done at each texture2D by default.
+				colorSlice1 = texture2D( cubeTex, texCoordSlice1 );
+				colorSlice2 = texture2D( cubeTex, texCoordSlice2 );
+
+				colorSlice3 = texture2D( cubeTex2, texCoordSlice1 );
+				colorSlice4 = texture2D( cubeTex2, texCoordSlice2 );
+
+				//How distant is zSlice1 to ZSlice2. Used to interpolate between one Z slice and the other.
+				float zDifference = mod(texCoord.z * 255.0, 1.0);
+
+				//Finally interpolate between the two intermediate colors of each Z slice.
+				return mix(colorSlice1, colorSlice2, zDifference) ;
+			}
+
+			vec4 sampleAs3DTexture2( vec3 texCoord )
+			{
+				vec4 colorSlice1, colorSlice2, colorSlice3, colorSlice4;
+				vec2 texCoordSlice1, texCoordSlice2;
+
+				//The z coordinate determines which Z slice we have to look for.
+				//Z slice number goes from 0 to 255.
+				float zSliceNumber1 = floor(texCoord.z  * 255.0);
+
+				//As we use trilinear we go the next Z slice.
+				float zSliceNumber2 = min( zSliceNumber1 + 1.0, 255.0); //Clamp to 255
+
+				//The Z slices are stored in a matrix of 16x16 of Z slices.
+				//The original UV coordinates have to be rescaled by the tile numbers in each row and column.
+				texCoord.xy /= 16.0;
+
+				texCoordSlice1 = texCoordSlice2 = texCoord.xy;
+
+				//Add an offset to the original UV coordinates depending on the row and column number.
+				texCoordSlice1.x += (mod(zSliceNumber1, 16.0 ) / 16.0);
+				texCoordSlice1.y += floor((255.0 - zSliceNumber1) / 16.0) / 16.0;
+
+				texCoordSlice2.x += (mod(zSliceNumber2, 16.0 ) / 16.0);
+				texCoordSlice2.y += floor((255.0 - zSliceNumber2) / 16.0) / 16.0;
+
+				//Get the opacity value from the 2D texture.
+				//Bilinear filtering is done at each texture2D by default.
+				colorSlice1 = texture2D( cubeTex, texCoordSlice1 );
+				colorSlice2 = texture2D( cubeTex, texCoordSlice2 );
+
+				colorSlice3 = texture2D( cubeTex2, texCoordSlice1 );
+				colorSlice4 = texture2D( cubeTex2, texCoordSlice2 );
+
+				//How distant is zSlice1 to ZSlice2. Used to interpolate between one Z slice and the other.
+				float zDifference = mod(texCoord.z * 255.0, 1.0);
+
+				//Finally interpolate between the two intermediate colors of each Z slice.
+				return mix(colorSlice3, colorSlice4, zDifference) ;
+			}
+
+
+      float HueToRgb(float p, float q, float t)
+     {
+         if (t < 0.0)
+         {
+           t += 1.0;
+         }
+         else if (t > 1.0) {
+           t -= 1.0;
+         }
+         else if (t < 1.0 / 6.0)
+         {
+           return p + (q - p) * 6.0 * t;
+         }
+         else if (t < 1.0 / 2.0)
+         {
+           return q;
+         }
+         else if (t < 2.0 / 3.0)
+         {
+           return p + (q - p) * (2.0 / 3.0 - t) * 6.0;
+         }
+
+         return p;
+     }
+
+
+			vec3 HUESample = vec3(0.0);
+
+      vec3 HslToRgb(vec3 hsl)
+      {
+          float r, g, b;
+
+          if (hsl.t == 0.0)
+              r = g = b = hsl.p;
+
+          else
+          {
+              float q = hsl.p < 0.5 ? hsl.p * (1.0 + hsl.t) : hsl.p + hsl.t - hsl.p * hsl.t;
+              float p = 2.0 * hsl.p - q;
+              float rr = hsl.s + 1.0/3.0;
+              float bb = hsl.s - 1.0 / 3.0;
+
+              r = HueToRgb(p, q, rr);
+              g = HueToRgb(p, q, hsl.s);
+              b = HueToRgb(p, q, bb);
+          }
+
+          HUESample.s = r;
+          HUESample.t = g;
+          HUESample.p = b;
+
+
+          return HUESample;
+      }
+
+			float polyX14[4];
+			float polyY14[4];
+
+			bool pnpoly4( float polyX14[4], float polyY14[4], float testx, float testy)
+			{
+				bool c = false;
+				if ( (( polyY14[0] > testy) != ( polyY14[3] > testy)) && (testx < ( polyX14[3] - polyX14[0] ) * (testy - polyY14[3] ) / (polyY14[3] - polyY14[0]) + polyX14[0]) )
+				{
+					 c = !c;
+				}
+				for (int i = 1; i < 4;i++) {
+					if ( (( polyY14[i] > testy) != ( polyY14[i-1] > testy)) && (testx < ( polyX14[i-1] - polyX14[i] ) * (testy - polyY14[i] ) / (polyY14[i-1] - polyY14[i]) + polyX14[i]) )
+					{
+						 c = !c;
+					 }
+
+				}
+				return c;
+			}
+
+
+			float polyX15[5];
+			float polyY15[5];
+
+			bool pnpoly5( float polyX15[5], float polyY15[5], float testx, float testy)
+			{
+				bool c = false;
+				if ( (( polyY15[0] > testy) != ( polyY15[4] > testy)) && (testx < ( polyX15[4] - polyX15[0] ) * (testy - polyY15[4] ) / (polyY15[4] - polyY15[0]) + polyX15[0]) )
+				{
+					 c = !c;
+				}
+				for (int i = 1; i < 5;i++) {
+					if ( (( polyY15[i] > testy) != ( polyY15[i-1] > testy)) && (testx < ( polyX15[i-1] - polyX15[i] ) * (testy - polyY15[i] ) / (polyY15[i-1] - polyY15[i]) + polyX15[i]) )
+					{
+						 c = !c;
+					 }
+
+				}
+				return c;
+			}
+
+
+			float polyX16[6];
+			float polyY16[6];
+
+			bool pnpoly6( float polyX16[6], float polyY16[6], float testx, float testy)
+			{
+				bool c = false;
+				if ( (( polyY16[0] > testy) != ( polyY16[5] > testy)) && (testx < ( polyX16[5] - polyX16[0] ) * (testy - polyY16[5] ) / (polyY16[5] - polyY16[0]) + polyX16[0]) )
+				{
+					 c = !c;
+				}
+				for (int i = 1; i < 6;i++) {
+					if ( (( polyY16[i] > testy) != ( polyY16[i-1] > testy)) && (testx < ( polyX16[i-1] - polyX16[i] ) * (testy - polyY16[i] ) / (polyY16[i-1] - polyY16[i]) + polyX16[i]) )
+					{
+						 c = !c;
+					 }
+
+				}
+				return c;
+			}
+
+			float polyX17[7];
+			float polyY17[7];
+
+			bool pnpoly7( float polyX17[7], float polyY17[7], float testx, float testy)
+			{
+				bool c = false;
+				if ( (( polyY17[0] > testy) != ( polyY17[6] > testy)) && (testx < ( polyX17[6] - polyX17[0] ) * (testy - polyY17[6] ) / (polyY17[6] - polyY17[0]) + polyX17[0]) )
+				{
+					 c = !c;
+				}
+				for (int i = 1; i < 7;i++) {
+					if ( (( polyY17[i] > testy) != ( polyY17[i-1] > testy)) && (testx < ( polyX17[i-1] - polyX17[i] ) * (testy - polyY17[i] ) / (polyY17[i-1] - polyY17[i]) + polyX17[i]) )
+					{
+						 c = !c;
+					 }
+
+				}
+				return c;
+			}
+
+  			vec3 GBCtoHCL (vec4 colorSample, vec4 colorSample2, float rotateVar3D, float radialValue, float lensMode)
+  			{
+								float newRadius;
+								float positionX;
+								float positionY;
+
+				 				float datam[5];
+								colorSample.a = colorSample.r;
+
+								if (colorSample.r < rangeVal){
+									colorSample.r = 0.0;
+								}
+								if (colorSample.g < rangeVal){
+									colorSample.g = 0.0;
+								}
+								if (colorSample.b < rangeVal){
+									colorSample.b = 0.0;
+								}
+								if (colorSample2.r < rangeVal){
+									colorSample2.r = 0.0;
+								}
+								if (colorSample2.g < rangeVal){
+									colorSample2.g = 0.0;
+								}
+
+
+
+								if (colorSample.r > maxrangeVal){
+									colorSample.r = 0.0;
+								}
+								if (colorSample.g > maxrangeVal){
+									colorSample.g = 0.0;
+								}
+								if (colorSample.b > maxrangeVal){
+									colorSample.b = 0.0;
+								}
+								if (colorSample2.r > maxrangeVal){
+									colorSample2.r = 0.0;
+								}
+								if (colorSample2.g > maxrangeVal){
+									colorSample2.g = 0.0;
+								}
+
+                float normV = sqrt(colorSample.r*colorSample.r + colorSample.g*colorSample.g + colorSample.b*colorSample.b + colorSample2.r*colorSample2.r );//+ colorSample2.g*colorSample2.g);
+
+              //   if(normV != 0.0){
+              //   datam[0] = colorSample.r/normV;
+			 			  //   datam[1] = colorSample.g/normV;
+			 			  //   datam[2] = colorSample.b/normV;
+			 			  //   datam[3] = colorSample2.r/normV;
+              //   datam[4] = colorSample2.g/normV;
+							//
+              // }
+              // else {
+              //   datam[0] = colorSample.r;
+			 			  //   datam[1] = colorSample.g;
+			 			  //   datam[2] = colorSample.b;
+			 			  //   datam[3] = colorSample2.r;
+              //   datam[4] = colorSample2.g;
+							//
+              // }
+
+							datam[0] = colorSample.r;
+		 			    datam[1] = colorSample.g;
+		 			    datam[2] = colorSample.b;
+		 			    datam[3] = colorSample2.r;
+              datam[4] = colorSample2.g;
+
+
+			          float PI = 3.14;
+
+			          float CX = 0.0;
+			          float CY = 0.0;
+								float GBCXL = 0.0;
+								float GBCYL = 0.0;
+
+			        //  float rorateVar = 0.65;
+							const int n = 4;
+
+							float angle[4];// = new double[n];
+							float GBCX[4];
+							float GBCY[4];
+    					angle[0] = PI / 2.0 + rotateVar3D;
+
+							GBCX[0] = cos(angle[0]);
+							GBCY[0] = sin(angle[0]);
+
+							for ( int i = 1; i < n; i++)
+					    {
+					        angle[i] = angle[i - 1] - 2.0 * PI / 4.0 ;
+									GBCX[i] = cos(angle[i]) * 0.997;
+									GBCY[i] = sin(angle[i]) * 0.997;
+					    }
+
+								for (int i = 0; i < n; i++)
+							  {
+							      if (angle[i] < 0.0)
+							      {
+							          angle[i] = angle[i] + PI * 2.0;
+							      }
+							      if (angle[i] > PI * 2.0)
+							      {
+							          angle[i] = angle[i] - PI * 2.0;
+							      }
+							  }
+
+						float temp = 0.0;
+						for (int write = 0; write < n; write++)
+						{
+						    for (int sort = 0; sort < n - 1; sort++)
+						    {
+						        if (angle[sort] > angle[sort + 1])
+						        {
+						            temp = angle[sort + 1];
+						            angle[sort + 1] = angle[sort];
+						            angle[sort] = temp;
+						        }
+						    }
+
+						}
+
+
+
+								float tempsumXY = 0.0;
+								for (int j = 0; j < n; j++)
+								{
+										tempsumXY = tempsumXY + datam[j];
+
+								}
+								if (tempsumXY == 0.0)
+								{
+										GBCXL = 0.0;
+										GBCYL = 0.0;
+								}
+								else
+								{
+										for (int k = 0; k < n; k++)
+										{
+												GBCXL = GBCXL + (datam[k] / tempsumXY) * GBCX[k];
+												GBCYL = GBCYL + (datam[k] / tempsumXY) * GBCY[k];
+
+										}
+
+										float tempangleXY = atan(GBCYL, GBCXL);
+										if (tempangleXY < 0.0)
+										{ tempangleXY = tempangleXY + PI * 2.0; }
+										bool flag = false;
+										float tempA = 0.0;
+										float tempB = 0.0;
+										for (int j = 0; j < n - 1; j++)
+										{
+												if ((tempangleXY > angle[j] || tempangleXY == angle[j]) && (tempangleXY < angle[j + 1]))
+												{
+														tempA = angle[j + 1];
+														tempB = angle[j];
+														flag = true;
+												}
+												if (flag == true)
+														break;
+										}
+										if (flag == false)
+										{
+												tempA = angle[0] + PI * 2.0;
+												tempB = angle[n - 1];
+										}
+										float lthXY = (sqrt((GBCXL * GBCXL) + (GBCYL * GBCYL)) / cos((tempA - tempB) / 2.0) * cos(-(tempA + tempB) / 2.0 + tempangleXY));
+										GBCXL = (lthXY * cos(tempangleXY));
+										GBCYL = (lthXY * sin(tempangleXY));
+								}
+
+								CX = GBCXL;
+								CY = GBCYL;
+
+
+
+                float rr = sqrt(pow(CX, 2.0) + pow(CY, 2.0));
+                if (rr >= 1.0) {
+                    CX /= rr;
+                    CY /= rr;
+                }
+
+
+								float newCX = 0.0;
+								float newCY = 0.0;
+								float centerX = 200.0;
+								float centerY = 200.0;
+
+								newCX = (CX+1.0)/2.0 * (310.0) + 45.0;
+								newCY = (CY+1.0)/2.0 * (310.0) + 45.0;
+
+ 								float dist = sqrt((newCX - centerX)*(newCX- centerX) + (newCY-centerY)*(newCY-centerY));
+
+								vec3 HSL2IN = vec3(0.0);
+                vec3 HSL2OUT = vec3(0.0);
+
+								float h = atan(CY, CX) + PI / 2.0;
+						        if (h < 0.0) {
+						            h = h + PI * 2.0;
+						        }
+						        if (h > PI * 2.0) {
+						            h = h - PI * 2.0;
+						        }
+
+						        h = h / PI * 180.0;
+						        float s = sqrt(pow(CX, 2.0) + pow(CY, 2.0));
+										float l =0.55;
+
+										if (lensMove == 1.0){
+											positionX = xValue + centerX;
+											positionY = yValue + centerY;
+
+											newRadius = sqrt((newCX - positionX)*(newCX - positionX) + (newCY - positionY)*(newCY - positionY) );
+
+										}
+
+										else{
+											float rr = sqrt(xValue*xValue + yValue*yValue);
+											positionX = rr*cos(lensAng) + centerX;
+											positionY = rr*sin(lensAng) + centerY;
+
+											newRadius = sqrt((newCX - positionX)*(newCX - positionX) + (newCY - positionY)*(newCY - positionY) );
+
+										}
+
+
+
+										// NEED TO CHANGE HERE FOR INVERSE EFFECT OF LENS
+										if (lensMode == 0.0 )
+										{
+											if (newRadius >  radiusR) {
+												l = 0.0;
+											}
+
+											else {
+												  l=0.55;//55;
+												//	h = 0.0;
+												//	s = 5.0;
+											}
+										}
+										else  {
+											if (newRadius <  radiusR) {
+												l = 0.0;
+											}
+											else {
+												  l=0.55;
+											}
+										}
+
+
+                    if(radialValue > dist)
+										{
+										l = 0.0;
+                    }
+
+
+										//WHETHER POINT LIES WITHIN THE ARC OR NOT
+									  float angleArc = atan(newCY-centerY,newCX-centerX);
+
+										float startAng = startAng * (PI/180.0);
+										float endAngle = arcWidth;
+                    float s_x = cos(startAng);
+                    float s_y = sin(startAng);
+                    float e_x = cos(arcWidth);
+                    float e_y = sin(arcWidth);
+
+										if (endAngle < startAng)
+										{
+											endAngle = endAngle + 2.0 * PI;
+										}
+
+
+										float half_angle = (endAngle - startAng) / 2.0;
+										float mid_angle  = (endAngle + startAng) / 2.0;
+										float cos_half_angle = cos(half_angle);
+
+										if (cos(angleArc - mid_angle) >= cos_half_angle)
+										{
+  									l=l;
+										}
+										else {
+											l=0.0;
+										}
+
+                    float d_x = (newCX - centerX);
+                    float d_y = (newCY - centerY);
+
+										if (polySide == 5.0 && brushMode == 1.0){
+
+										h = 0.0;
+										s = 0.0;
+										l = 0.0;
+										float polyXX1[4];
+										float polyYY1[4];
+										float polyXX2[4];
+										float polyYY2[4];
+										float polyXX3[4];
+										float polyYY3[4];
+										float polyXX4[4];
+										float polyYY4[4];
+										float polyXX5[4];
+										float polyYY5[4];
+
+										polyXX1[0] = x1;
+										polyXX1[1] = x2;
+										polyXX1[2] = x3;
+										polyXX1[3] = x4;
+										polyYY1[0] = y1;
+										polyYY1[1] = y2;
+										polyYY1[2] = y3;
+										polyYY1[3] = y4;
+
+										polyXX2[0] = x11;
+										polyXX2[1] = x12;
+										polyXX2[2] = x13;
+										polyXX2[3] = x14;
+										polyYY2[0] = y11;
+										polyYY2[1] = y12;
+										polyYY2[2] = y13;
+										polyYY2[3] = y14;
+
+										polyXX3[0] = x31;
+										polyXX3[1] = x32;
+										polyXX3[2] = x33;
+										polyXX3[3] = x34;
+										polyYY3[0] = y31;
+										polyYY3[1] = y32;
+										polyYY3[2] = y33;
+										polyYY3[3] = y34;
+
+										polyXX4[0] = x41;
+										polyXX4[1] = x42;
+										polyXX4[2] = x43;
+										polyXX4[3] = x44;
+										polyYY4[0] = y41;
+										polyYY4[1] = y42;
+										polyYY4[2] = y43;
+										polyYY4[3] = y44;
+
+										polyXX5[0] = x51;
+										polyXX5[1] = x52;
+										polyXX5[2] = x53;
+										polyXX5[3] = x54;
+										polyYY5[0] = y51;
+										polyYY5[1] = y52;
+										polyYY5[2] = y53;
+										polyYY5[3] = y54;
+
+
+										bool pointIO1	=	pnpoly4(polyXX1, polyYY1, newCX, newCY);
+										if (pointIO1){
+											h = hslh1;
+											s = hsls1;
+											l = hsll;
+										}
+
+										bool pointIO2	=	pnpoly4(polyXX2, polyYY2, newCX, newCY);
+										if (pointIO2){
+											h = hslh2;
+											s = hsls2;
+											l = hsll;
+										}
+
+										bool pointIO3	=	pnpoly4(polyXX3, polyYY3, newCX, newCY);
+										if (pointIO3){
+											h = hslh3;
+											s = hsls3;
+											l = hsll;
+										}
+
+										bool pointIO4	=	pnpoly4(polyXX4, polyYY4, newCX, newCY);
+										if (pointIO4){
+											h = hslh4;
+											s = hsls4;
+											l = hsll;
+										}
+
+										bool pointIO5	=	pnpoly4(polyXX5, polyYY5, newCX, newCY);
+										if (pointIO5){
+											h = hslh5;
+											s = hsls5;
+											l = hsll;
+										}
+
+										}
+
+										if (polySide == 6.0 && brushMode == 1.0){
+
+										h = 0.0;
+										s = 0.0;
+										l = 0.0;
+										float polyXX1[5];
+										float polyYY1[5];
+										float polyXX2[5];
+										float polyYY2[5];
+										float polyXX3[5];
+										float polyYY3[5];
+										float polyXX4[5];
+										float polyYY4[5];
+										float polyXX5[5];
+										float polyYY5[5];
+
+										polyXX1[0] = x1;
+										polyXX1[1] = x2;
+										polyXX1[2] = x3;
+										polyXX1[3] = x4;
+										polyXX1[4] = x5;
+										polyYY1[0] = y1;
+										polyYY1[1] = y2;
+										polyYY1[2] = y3;
+										polyYY1[3] = y4;
+										polyYY1[4] = y5;
+
+										polyXX2[0] = x11;
+										polyXX2[1] = x12;
+										polyXX2[2] = x13;
+										polyXX2[3] = x14;
+										polyXX2[4] = x15;
+										polyYY2[0] = y11;
+										polyYY2[1] = y12;
+										polyYY2[2] = y13;
+										polyYY2[3] = y14;
+										polyYY2[4] = y15;
+										//
+										polyXX3[0] = x31;
+										polyXX3[1] = x32;
+										polyXX3[2] = x33;
+										polyXX3[3] = x34;
+										polyXX3[4] = x35;
+										polyYY3[0] = y31;
+										polyYY3[1] = y32;
+										polyYY3[2] = y33;
+										polyYY3[3] = y34;
+										polyYY3[4] = y35;
+
+										polyXX4[0] = x41;
+										polyXX4[1] = x42;
+										polyXX4[2] = x43;
+										polyXX4[3] = x44;
+										polyXX4[4] = x45;
+										polyYY4[0] = y41;
+										polyYY4[1] = y42;
+										polyYY4[2] = y43;
+										polyYY4[3] = y44;
+										polyYY4[4] = y45;
+
+										polyXX5[0] = x51;
+										polyXX5[1] = x52;
+										polyXX5[2] = x53;
+										polyXX5[3] = x54;
+										polyXX5[4] = x55;
+
+										polyYY5[0] = y51;
+										polyYY5[1] = y52;
+										polyYY5[2] = y53;
+										polyYY5[3] = y54;
+										polyYY5[4] = y55;
+
+
+
+
+										bool pointIO1	=	pnpoly5(polyXX1, polyYY1, newCX, newCY);
+										if (pointIO1){
+											h = hslh1;
+											s = hsls1;
+											l = hsll;
+										}
+
+
+										bool pointIO2	=	pnpoly5(polyXX2, polyYY2, newCX, newCY);
+										if (pointIO2){
+											h = hslh2;
+											s = hsls2;
+											l = hsll;
+										}
+
+										bool pointIO3	=	pnpoly5(polyXX3, polyYY3, newCX, newCY);
+										if (pointIO3){
+											h = hslh3;
+											s = hsls3;
+											l = hsll;
+										}
+
+										bool pointIO4	=	pnpoly5(polyXX4, polyYY4, newCX, newCY);
+										if (pointIO4){
+											h = hslh4;
+											s = hsls4;
+											l = hsll;
+										}
+
+										bool pointIO5	=	pnpoly5(polyXX5, polyYY5, newCX, newCY);
+										if (pointIO5){
+											h = hslh5;
+											s = hsls5;
+											l = hsll;
+										}
+
+										}
+
+										if (polySide == 7.0 && brushMode == 1.0){
+
+										h = 0.0;
+										s = 0.0;
+										l = 0.0;
+										float polyXX1[6];
+										float polyYY1[6];
+										float polyXX2[6];
+										float polyYY2[6];
+										float polyXX3[6];
+										float polyYY3[6];
+										float polyXX4[6];
+										float polyYY4[6];
+										float polyXX5[6];
+										float polyYY5[6];
+
+										polyXX1[0] = x1;
+										polyXX1[1] = x2;
+										polyXX1[2] = x3;
+										polyXX1[3] = x4;
+										polyXX1[4] = x5;
+										polyXX1[5] = x6;
+										polyYY1[0] = y1;
+										polyYY1[1] = y2;
+										polyYY1[2] = y3;
+										polyYY1[3] = y4;
+										polyYY1[4] = y5;
+										polyYY1[5] = y6;
+
+										polyXX2[0] = x11;
+										polyXX2[1] = x12;
+										polyXX2[2] = x13;
+										polyXX2[3] = x14;
+										polyXX2[4] = x15;
+										polyXX2[5] = x16;
+										polyYY2[0] = y11;
+										polyYY2[1] = y12;
+										polyYY2[2] = y13;
+										polyYY2[3] = y14;
+										polyYY2[4] = y15;
+										polyYY2[5] = y16;
+										//
+										polyXX3[0] = x31;
+										polyXX3[1] = x32;
+										polyXX3[2] = x33;
+										polyXX3[3] = x34;
+										polyXX3[4] = x35;
+										polyXX3[5] = x36;
+										polyYY3[0] = y31;
+										polyYY3[1] = y32;
+										polyYY3[2] = y33;
+										polyYY3[3] = y34;
+										polyYY3[4] = y35;
+										polyYY3[5] = y36;
+
+										polyXX4[0] = x41;
+										polyXX4[1] = x42;
+										polyXX4[2] = x43;
+										polyXX4[3] = x44;
+										polyXX4[4] = x45;
+										polyXX4[5] = x46;
+										polyYY4[0] = y41;
+										polyYY4[1] = y42;
+										polyYY4[2] = y43;
+										polyYY4[3] = y44;
+										polyYY4[4] = y45;
+										polyYY4[5] = y46;
+
+										polyXX5[0] = x51;
+										polyXX5[1] = x52;
+										polyXX5[2] = x53;
+										polyXX5[3] = x54;
+										polyXX5[4] = x55;
+										polyXX5[5] = x56;
+										polyYY5[0] = y51;
+										polyYY5[1] = y52;
+										polyYY5[2] = y53;
+										polyYY5[3] = y54;
+										polyYY5[4] = y55;
+										polyYY5[5] = y56;
+
+
+
+										bool pointIO1	=	pnpoly6(polyXX1, polyYY1, newCX, newCY);
+										if (pointIO1){
+											h = hslh1;
+											s = hsls1;
+											l = hsll;
+										}
+
+
+										bool pointIO2	=	pnpoly6(polyXX2, polyYY2, newCX, newCY);
+										if (pointIO2){
+											h = hslh2;
+											s = hsls2;
+											l = hsll;
+										}
+
+										bool pointIO3	=	pnpoly6(polyXX3, polyYY3, newCX, newCY);
+										if (pointIO3){
+											h = hslh3;
+											s = hsls3;
+											l = hsll;
+										}
+
+										bool pointIO4	=	pnpoly6(polyXX4, polyYY4, newCX, newCY);
+										if (pointIO4){
+											h = hslh4;
+											s = hsls4;
+											l = hsll;
+										}
+
+										bool pointIO5	=	pnpoly6(polyXX5, polyYY5, newCX, newCY);
+										if (pointIO5){
+											h = hslh5;
+											s = hsls5;
+											l = hsll;
+										}
+
+										}
+
+										if (polySide == 8.0 && brushMode == 1.0){
+
+										h = 0.0;
+										s = 0.0;
+										l = 0.0;
+										float polyXX1[7];
+										float polyYY1[7];
+										float polyXX2[7];
+										float polyYY2[7];
+										float polyXX3[7];
+										float polyYY3[7];
+										float polyXX4[7];
+										float polyYY4[7];
+										float polyXX5[7];
+										float polyYY5[7];
+
+										polyXX1[0] = x1;
+										polyXX1[1] = x2;
+										polyXX1[2] = x3;
+										polyXX1[3] = x4;
+										polyXX1[4] = x5;
+										polyXX1[5] = x6;
+										polyXX1[6] = x7;
+										polyYY1[0] = y1;
+										polyYY1[1] = y2;
+										polyYY1[2] = y3;
+										polyYY1[3] = y4;
+										polyYY1[4] = y5;
+										polyYY1[5] = y6;
+										polyYY1[6] = y7;
+
+										polyXX2[0] = x11;
+										polyXX2[1] = x12;
+										polyXX2[2] = x13;
+										polyXX2[3] = x14;
+										polyXX2[4] = x15;
+										polyXX2[5] = x16;
+										polyXX2[6] = x17;
+										polyYY2[0] = y11;
+										polyYY2[1] = y12;
+										polyYY2[2] = y13;
+										polyYY2[3] = y14;
+										polyYY2[4] = y15;
+										polyYY2[5] = y16;
+										polyYY2[6] = y17;
+										//
+										polyXX3[0] = x31;
+										polyXX3[1] = x32;
+										polyXX3[2] = x33;
+										polyXX3[3] = x34;
+										polyXX3[4] = x35;
+										polyXX3[5] = x36;
+										polyXX3[6] = x37;
+										polyYY3[0] = y31;
+										polyYY3[1] = y32;
+										polyYY3[2] = y33;
+										polyYY3[3] = y34;
+										polyYY3[4] = y35;
+										polyYY3[5] = y36;
+										polyYY3[6] = y37;
+
+										polyXX4[0] = x41;
+										polyXX4[1] = x42;
+										polyXX4[2] = x43;
+										polyXX4[3] = x44;
+										polyXX4[4] = x45;
+										polyXX4[5] = x46;
+										polyXX4[6] = x47;
+										polyYY4[0] = y41;
+										polyYY4[1] = y42;
+										polyYY4[2] = y43;
+										polyYY4[3] = y44;
+										polyYY4[4] = y45;
+										polyYY4[5] = y46;
+										polyYY4[6] = y47;
+
+										polyXX5[0] = x51;
+										polyXX5[1] = x52;
+										polyXX5[2] = x53;
+										polyXX5[3] = x54;
+										polyXX5[4] = x55;
+										polyXX5[5] = x56;
+										polyXX5[6] = x57;
+										polyYY5[0] = y51;
+										polyYY5[1] = y52;
+										polyYY5[2] = y53;
+										polyYY5[3] = y54;
+										polyYY5[4] = y55;
+										polyYY5[5] = y56;
+										polyYY5[6] = y57;
+
+
+										bool pointIO1	=	pnpoly7(polyXX1, polyYY1, newCX, newCY);
+										if (pointIO1){
+											h = hslh1;
+											s = hsls1;
+											l = hsll;
+										}
+
+
+										bool pointIO2	=	pnpoly7(polyXX2, polyYY2, newCX, newCY);
+										if (pointIO2){
+											h = hslh2;
+											s = hsls2;
+											l = hsll;
+										}
+
+										bool pointIO3	=	pnpoly7(polyXX3, polyYY3, newCX, newCY);
+										if (pointIO3){
+											h = hslh3;
+											s = hsls3;
+											l = hsll;
+										}
+
+										bool pointIO4	=	pnpoly7(polyXX4, polyYY4, newCX, newCY);
+										if (pointIO4){
+											h = hslh4;
+											s = hsls4;
+											l = hsll;
+										}
+
+										bool pointIO5	=	pnpoly7(polyXX5, polyYY5, newCX, newCY);
+										if (pointIO5){
+											h = hslh5;
+											s = hsls5;
+											l = hsll;
+										}
+
+										}
+
+										HSL2IN.s = h/360.0;
+										HSL2IN.t = s;
+										HSL2IN.p = l;
+
+            return HslToRgb(HSL2IN);
+
+		        }
+
+
+
+
+
+						vec4  clipPlanesNew;
+						bool withinBoundaries_Plane( vec3 pos ) {
+									clipPlanesNew.x = xClippingPlaneMin;
+									clipPlanesNew.y = yClippingPlaneMin;
+									clipPlanesNew.z = zClippingPlaneMin;
+									clipPlanesNew.w = wClippingPlane;
+
+						return dot(pos, clipPlanesNew.xyz) < clipPlanesNew.w;
+						}
+
+						bool withinBoundaries_Axis( vec3 pos ) {
+								    if (
+								        pos.x > xClippingPlaneMin ||
+								        pos.y > yClippingPlaneMin ||
+								        pos.z > zClippingPlaneMin ||
+								       pos.x < xClippingPlaneMax ||
+								       pos.y < yClippingPlaneMax ||
+								       pos.z < zClippingPlaneMax
+								    ) return false;
+								    return true;
+						}
+
+			void main( void ) {
+
+				//Transform the coordinates it from [-1;1] to [0;1]
+				vec2 texc = vec2(((projectedCoords.x / projectedCoords.w) + 1.0 ) / 2.0,
+								((projectedCoords.y / projectedCoords.w) + 1.0 ) / 2.0 );
+
+				//The back position is the world space position stored in the texture.
+				vec3 backPos = texture2D(tex, texc).xyz;
+
+				//The front position is the world space position of the second render pass.
+				vec3 frontPos = worldSpaceCoords;
+
+				//The direction from the front position to back position.
+				vec3 dir = backPos - frontPos;
+
+				float rayLength = length(dir);
+
+				//Calculate how long to increment in each step.
+				float delta = 1.0 / steps;
+
+				//The increment in each direction for each step.
+				vec3 deltaDirection = normalize(dir) * delta;
+				float deltaDirectionLength = length(deltaDirection);
+
+				//Start the ray casting from the front position.
+				vec3 currentPosition = frontPos;
+
+				//The color accumulator.
+				vec4 accumulatedColor = vec4(0.0);
+
+				//The alpha value accumulated so far.
+				float accumulatedAlpha = 0.0;
+
+				//How long has the ray travelled so far.
+				float accumulatedLength = 0.0;
+
+				//If we have twice as many samples, we only need ~1/2 the alpha per sample.
+				//Scaling by 256/10 just happens to give a good value for the alphaCorrection slider.
+				float alphaScaleFactor = 205.6 * delta;
+
+				vec4 colorSample;
+        vec4 colorSample2;
+				float alphaSample;
+				float accumulatedRGB;
+			  vec3 HCL2Sample = vec3(0.0);
+				vec4 MutatedColorSample;
+
+				//Perform the ray marching iterations
+				for(int i = 0; i < MAX_STEPS; i++)
+				{
+					//Get the voxel intensity value from the 3D texture.
+					colorSample = sampleAs3DTexture( currentPosition );
+					colorSample2 = sampleAs3DTexture2( currentPosition );
+
+
+					if (modeGBC == 1.0)
+					{
+					HCL2Sample = GBCtoHCL( colorSample, colorSample2, rotateVar3D, radialValue, lensMode);
+					}
+
+					else if(modeGBC == 0.0 ){
+
+            HCL2Sample.r = colorSample.r;
+						HCL2Sample.g = colorSample.g;
+						HCL2Sample.b = colorSample.b;
+					}
+          else {
+            HCL2Sample.r = colorSample.r;
+            HCL2Sample.g = colorSample.g;
+            HCL2Sample.b = colorSample.b;
+          }
+					// Magnitude Thresholding for
+					accumulatedRGB = sqrt(((HCL2Sample.r*HCL2Sample.r)+(HCL2Sample.g*HCL2Sample.g)+(HCL2Sample.b*HCL2Sample.b))/255.0);
+
+      /*    if(colorSample.b < testValue)
+          {
+            HCL2Sample.r = 0.0;
+          }
+*/
+        //  colorSample.a = (colorSample.r*0.15 + colorSample.g*0.35 + colorSample.b*0.21 + colorSample.a*0.29 )/4.0;
+          colorSample.r = HCL2Sample.r;
+          colorSample.g = HCL2Sample.g;
+          colorSample.b = HCL2Sample.b;
+
+					if (colorSample.a < rangeVal){
+						colorSample.a=0.0;
+					}
+
+					if (colorSample.a > maxrangeVal){
+						colorSample.a=0.0;
+					}
+
+      //    colorSample.a = (HCL2Sample.r + HCL2Sample.g + HCL2Sample.b + colorSample2.r)/255.0;
+
+			//Allow the alpha correction customization.
+
+          alphaSample = colorSample.a * alphaCorrection;
+
+
+					//Applying this effect to both the color and alpha accumulation results in more realistic transparency.
+					//alphaSample *= (1.0 - accumulatedAlpha);
+
+					//Scaling alpha by the number of steps makes the final color invariant to the step size.
+					alphaSample *= alphaScaleFactor;
+
+					// if ( withinBoundaries_Plane( currentPosition ) ) {
+					// 		 //Perform the composition.
+					// 		 accumulatedColor += colorSample * alphaSample;
+					// 		 //Store the alpha accumulated so far.
+					// 		 accumulatedAlpha += alphaSample;
+					//  }
+
+					if (axisClipping == 1.0){
+					 if ( withinBoundaries_Axis( currentPosition ) ) {
+ 							 //Perform the composition.
+ 							 accumulatedColor += colorSample * alphaSample;
+ 							 //Store the alpha accumulated so far.
+ 							 accumulatedAlpha += alphaSample;
+ 					 }
+				 }
+				 else{
+					 if ( withinBoundaries_Plane( currentPosition ) ) {
+ 							 //Perform the composition.
+ 							 accumulatedColor += colorSample * alphaSample;
+ 							 //Store the alpha accumulated so far.
+ 							 accumulatedAlpha += alphaSample;
+ 					 }
+				 }
+
+					//Advance the ray.
+					currentPosition += deltaDirection;
+					accumulatedLength += deltaDirectionLength;
+
+					//If the length traversed is more than the ray length, or if the alpha accumulated reaches 1.0 then exit.
+					if(accumulatedLength >= rayLength || accumulatedAlpha >= 1.0 )
+						break;
+				}
+
+				gl_FragColor  = accumulatedColor;
+
+			}
+		</script>
+
+		<script id="vertexShaderSecondPass" type="x-shader/x-vertex">
+			varying vec3 worldSpaceCoords;
+			varying vec4 projectedCoords;
+
+
+			void main()
+			{
+				worldSpaceCoords = (modelMatrix * vec4(position + vec3(0.5, 0.5,0.5), 1.0 )).xyz;
+				gl_Position = projectionMatrix *  modelViewMatrix * vec4( position, 1.0 );
+				projectedCoords =  projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+			}
+		</script>
+
+		<script>
+			if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+			var container, stats;
+			var camera, sceneFirstPass, sceneSecondPass, renderer;
+
+			var clock = new THREE.Clock();
+			var rtTexture, transferTexture;
+			var cubeTextures = ['Default'];
+			var histogram = [];
+			var guiControls;
+
+			var materialSecondPass;
+			init();
+			animate();
+			// helloWorld();
+
+			function onWindowResize( event ) {
+
+				camera.aspect = window.innerWidth / window.innerHeight;
+				camera.updateProjectionMatrix();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+			}
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				updateData();
+				render();
+        helloWorld();
+
+
+			}
+
+			function render() {
+
+			//	helloWorld();
+				var delta = clock.getDelta();
+				//Render first pass and store the world space coords of the back face fragments into the texture.
+				renderer.render( sceneFirstPass, camera, rtTexture, true );
+
+				//Render the second pass and perform the volume rendering.
+				renderer.render( sceneSecondPass, camera );
+				materialSecondPass.uniforms.steps.value = guiControls.steps;
+				materialSecondPass.uniforms.alphaCorrection.value = guiControls.alphaCorrection;
+
+				materialSecondPass.uniforms.modeGBC.value = guiControls.modeGBC;
+				materialSecondPass.uniforms.rotateVar3D.value = guiControls.rotateVar3D;
+
+      //  materialSecondPass.uniforms.colorSpaceWidth1.value = guiControls.colorSpaceWidth1;
+        materialSecondPass.uniforms.radialValue.value = guiControls.radialValue;
+				materialSecondPass.uniforms.lensMode.value = guiControls.lensMode;
+				materialSecondPass.uniforms.lensAng.value = guiControls.lensAng;
+				materialSecondPass.uniforms.lensMove.value = guiControls.lensMove;
+
+        materialSecondPass.uniforms.binValue.value = guiControls.binValue;
+        materialSecondPass.uniforms.testValue.value = guiControls.testValue;
+				materialSecondPass.uniforms.xValue.value = guiControls.xValue;
+				materialSecondPass.uniforms.yValue.value = guiControls.yValue;
+				materialSecondPass.uniforms.radiusR.value = guiControls.radiusR;
+				materialSecondPass.uniforms.arcWidth.value = guiControls.arcWidth;
+				materialSecondPass.uniforms.modeARC.value = guiControls.modeARC;
+				materialSecondPass.uniforms.startAng.value = guiControls.startAng;
+				materialSecondPass.uniforms.points.value = guiControls.points;
+				materialSecondPass.uniforms.rangeVal.value = guiControls.rangeVal;
+				materialSecondPass.uniforms.maxrangeVal.value = guiControls.maxrangeVal;
+
+				materialSecondPass.uniforms.xClippingPlaneMin.value = guiControls.xClippingPlaneMin;
+				materialSecondPass.uniforms.xClippingPlaneMin2.value = guiControls.xClippingPlaneMin2;
+				materialSecondPass.uniforms.xClippingPlaneMax.value = guiControls.xClippingPlaneMax;
+				materialSecondPass.uniforms.yClippingPlaneMin.value = guiControls.yClippingPlaneMin;
+				materialSecondPass.uniforms.yClippingPlaneMax.value = guiControls.yClippingPlaneMax;
+				materialSecondPass.uniforms.zClippingPlaneMin.value = guiControls.zClippingPlaneMin;
+				materialSecondPass.uniforms.zClippingPlaneMax.value = guiControls.zClippingPlaneMax;
+				materialSecondPass.uniforms.wClippingPlane.value = guiControls.wClippingPlane;
+				materialSecondPass.uniforms.axisClipping.value = guiControls.axisClipping;
+				materialSecondPass.uniforms.x1.value = guiControls.x1;
+				materialSecondPass.uniforms.x2.value = guiControls.x2;
+				materialSecondPass.uniforms.x3.value = guiControls.x3;
+				materialSecondPass.uniforms.x4.value = guiControls.x4;
+				materialSecondPass.uniforms.x5.value = guiControls.x5;
+				materialSecondPass.uniforms.x6.value = guiControls.x6;
+				materialSecondPass.uniforms.x7.value = guiControls.x7;
+				materialSecondPass.uniforms.x8.value = guiControls.x8;
+				materialSecondPass.uniforms.y1.value = guiControls.y1;
+				materialSecondPass.uniforms.y2.value = guiControls.y2;
+				materialSecondPass.uniforms.y3.value = guiControls.y3;
+				materialSecondPass.uniforms.y4.value = guiControls.y4;
+				materialSecondPass.uniforms.y5.value = guiControls.y5;
+				materialSecondPass.uniforms.y6.value = guiControls.y6;
+				materialSecondPass.uniforms.y7.value = guiControls.y7;
+				materialSecondPass.uniforms.y8.value = guiControls.y8;
+				materialSecondPass.uniforms.x11.value = guiControls.x11;
+				materialSecondPass.uniforms.x12.value = guiControls.x12;
+				materialSecondPass.uniforms.x13.value = guiControls.x13;
+				materialSecondPass.uniforms.x14.value = guiControls.x14;
+				materialSecondPass.uniforms.x15.value = guiControls.x15;
+				materialSecondPass.uniforms.x16.value = guiControls.x16;
+				materialSecondPass.uniforms.x17.value = guiControls.x17;
+				materialSecondPass.uniforms.x18.value = guiControls.x18;
+				materialSecondPass.uniforms.y11.value = guiControls.y11;
+				materialSecondPass.uniforms.y12.value = guiControls.y12;
+				materialSecondPass.uniforms.y13.value = guiControls.y13;
+				materialSecondPass.uniforms.y14.value = guiControls.y14;
+				materialSecondPass.uniforms.y15.value = guiControls.y15;
+				materialSecondPass.uniforms.y16.value = guiControls.y16;
+				materialSecondPass.uniforms.y17.value = guiControls.y17;
+				materialSecondPass.uniforms.y18.value = guiControls.y18;
+
+				materialSecondPass.uniforms.x31.value = guiControls.x31;
+				materialSecondPass.uniforms.x32.value = guiControls.x32;
+				materialSecondPass.uniforms.x33.value = guiControls.x33;
+				materialSecondPass.uniforms.x34.value = guiControls.x34;
+				materialSecondPass.uniforms.x35.value = guiControls.x35;
+				materialSecondPass.uniforms.x36.value = guiControls.x36;
+				materialSecondPass.uniforms.x37.value = guiControls.x37;
+				materialSecondPass.uniforms.x38.value = guiControls.x38;
+				materialSecondPass.uniforms.y31.value = guiControls.y31;
+				materialSecondPass.uniforms.y32.value = guiControls.y32;
+				materialSecondPass.uniforms.y33.value = guiControls.y33;
+				materialSecondPass.uniforms.y34.value = guiControls.y34;
+				materialSecondPass.uniforms.y35.value = guiControls.y35;
+				materialSecondPass.uniforms.y36.value = guiControls.y36;
+				materialSecondPass.uniforms.y37.value = guiControls.y37;
+				materialSecondPass.uniforms.y38.value = guiControls.y38;
+
+				materialSecondPass.uniforms.x41.value = guiControls.x41;
+				materialSecondPass.uniforms.x42.value = guiControls.x42;
+				materialSecondPass.uniforms.x43.value = guiControls.x43;
+				materialSecondPass.uniforms.x44.value = guiControls.x44;
+				materialSecondPass.uniforms.x45.value = guiControls.x45;
+				materialSecondPass.uniforms.x46.value = guiControls.x46;
+				materialSecondPass.uniforms.x47.value = guiControls.x47;
+				materialSecondPass.uniforms.x48.value = guiControls.x48;
+				materialSecondPass.uniforms.y41.value = guiControls.y41;
+				materialSecondPass.uniforms.y42.value = guiControls.y42;
+				materialSecondPass.uniforms.y43.value = guiControls.y43;
+				materialSecondPass.uniforms.y44.value = guiControls.y44;
+				materialSecondPass.uniforms.y45.value = guiControls.y45;
+				materialSecondPass.uniforms.y46.value = guiControls.y46;
+				materialSecondPass.uniforms.y47.value = guiControls.y47;
+				materialSecondPass.uniforms.y48.value = guiControls.y48;
+
+				materialSecondPass.uniforms.x51.value = guiControls.x51;
+				materialSecondPass.uniforms.x52.value = guiControls.x52;
+				materialSecondPass.uniforms.x53.value = guiControls.x53;
+				materialSecondPass.uniforms.x54.value = guiControls.x54;
+				materialSecondPass.uniforms.x55.value = guiControls.x55;
+				materialSecondPass.uniforms.x56.value = guiControls.x56;
+				materialSecondPass.uniforms.x57.value = guiControls.x57;
+				materialSecondPass.uniforms.x58.value = guiControls.x58;
+				materialSecondPass.uniforms.y51.value = guiControls.y51;
+				materialSecondPass.uniforms.y52.value = guiControls.y52;
+				materialSecondPass.uniforms.y53.value = guiControls.y53;
+				materialSecondPass.uniforms.y54.value = guiControls.y54;
+				materialSecondPass.uniforms.y55.value = guiControls.y55;
+				materialSecondPass.uniforms.y56.value = guiControls.y56;
+				materialSecondPass.uniforms.y57.value = guiControls.y57;
+				materialSecondPass.uniforms.y58.value = guiControls.y58;
+				materialSecondPass.uniforms.hslh1.value = guiControls.hslh1;
+				materialSecondPass.uniforms.hslh2.value = guiControls.hslh2;
+				materialSecondPass.uniforms.hslh3.value = guiControls.hslh3;
+				materialSecondPass.uniforms.hslh4.value = guiControls.hslh4;
+				materialSecondPass.uniforms.hslh5.value = guiControls.hslh5;
+				materialSecondPass.uniforms.hsls1.value = guiControls.hsls1;
+				materialSecondPass.uniforms.hsls2.value = guiControls.hsls2;
+				materialSecondPass.uniforms.hsls3.value = guiControls.hsls3;
+				materialSecondPass.uniforms.hsls4.value = guiControls.hsls4;
+				materialSecondPass.uniforms.hsls5.value = guiControls.hsls5;
+				materialSecondPass.uniforms.hsll.value = guiControls.hsll;
+				materialSecondPass.uniforms.polySide.value = guiControls.polySide;
+				materialSecondPass.uniforms.clusters.value = guiControls.clusters;
+				materialSecondPass.uniforms.brushMode.value = guiControls.brushMode;
+				//materialSecondPass.uniforms["defaultLens"] = guiControls.defaultLens;
+
+
+			}
+
+
+
+		</script>
+
+	</body>
+</html>
